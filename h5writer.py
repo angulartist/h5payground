@@ -2,7 +2,7 @@ import os
 from keras.datasets import mnist
 from albumentations import Compose, HorizontalFlip, RandomGamma, ToFloat, Resize
 import h5py as h5
-from concurrent.futures import ProcessPoolExecutor as PoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from pytictoc import TicToc
 from functools import wraps
 
@@ -67,13 +67,9 @@ class HDF5ImageWriter(object):
 
 pipeline = Compose(
     [
+        Resize(300, 300),
         HorizontalFlip(p=0.5),
         RandomGamma(gamma_limit=(80, 120), p=0.5),
-        HorizontalFlip(p=0.5),
-        HorizontalFlip(p=0.5),
-        HorizontalFlip(p=0.5),
-        HorizontalFlip(p=0.5),
-        HorizontalFlip(p=0.5),
         HorizontalFlip(p=0.5),
     ]
 )
@@ -90,8 +86,9 @@ def process(func):
     @wraps(func)
     def wrapper(*args):
         print(f'Processing with PID: #{os.getpid()}.')
-        return func(*args)
-        print(f'PID #{os.getpid()} finished processing.')
+        res = func(*args)
+        print(f'PID: #{os.getpid()} finished processing.')
+        return res
     return wrapper
 
 @process
@@ -102,12 +99,15 @@ def transform(sample):
 
 
 h5_writer = HDF5ImageWriter(
-    src="files.h5", dims=(len(X_test), 28, 28, 1)
+    src="files.h5", dims=(len(X_test), 300, 300, 1)
 )
 
 with TicToc():
-    with h5_writer as writer:
-        with PoolExecutor(max_workers=os.cpu_count()) as executor:
-            for image, label in executor.map(transform, zip(X_test, y_test)):
-                print("Adding:", label)
-                writer.add([image], [label])
+    for image, label in zip(X_test, y_test):
+        image, label = transform((image, label))
+        print("Adding:", label)
+
+with TicToc():
+    with ProcessPoolExecutor() as executor:
+        for image, label in executor.map(transform, zip(X_test, y_test)):
+            print("Adding:", label)
